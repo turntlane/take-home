@@ -5,5 +5,7 @@ dist/
 .env.*
 !.env.example
 .DS_Store
+docs/PLAN.md
+docs/DECISIONS.md
 *.log
 .vercel/

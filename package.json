@@ -1,0 +1,11 @@
+{
+  "name": "reading-list",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "api": "npm --prefix apps/api run start:dev",
+    "mobile": "npm --prefix apps/mobile run start",
+    "test:api": "npm --prefix apps/api run test",
+    "lint:api": "npm --prefix apps/api run lint"
+  }
+}

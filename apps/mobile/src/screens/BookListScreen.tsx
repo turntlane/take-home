@@ -73,6 +73,13 @@ export default function BookListScreen() {
 
   return (
     <View style={styles.container}>
+      <View style={styles.addButton}>
+        <Button
+          title="Add book"
+          onPress={() => navigation.navigate('CreateBook')}
+        />
+      </View>
+
       <TextInput
         style={styles.searchInput}
         placeholder="Search by title"
@@ -149,6 +156,7 @@ export default function BookListScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 12 },
+  addButton: { marginBottom: 8 },
   searchInput: {
     borderWidth: 1,
     borderColor: '#ccc',

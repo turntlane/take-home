@@ -1,8 +1,13 @@
 -- Reading-list schema. Run this in the Supabase SQL editor.
 -- Constraints mirror the API's DTO validation (defense in depth).
+-- Re-running this file drops and recreates the table (demo data is disposable;
+-- no migration tooling by design).
 
-create table if not exists books (
+drop table if exists books;
+
+create table books (
   id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
   title text not null,
   author text,
   status text not null default 'to_read',
@@ -15,6 +20,8 @@ create table if not exists books (
   constraint books_status_valid check (status in ('to_read', 'reading', 'finished')),
   constraint books_rating_range check (rating is null or rating between 1 and 5)
 );
+
+create index books_user_id_idx on books (user_id);
 
 -- Keep updated_at current on every update.
 create or replace function set_updated_at()

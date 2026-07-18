@@ -11,8 +11,9 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { listBooks } from '../lib/api';
+import { listBooks, logout } from '../lib/api';
 import { STATUS_LABELS } from '../lib/labels';
+import { clearSession, getSession, type Session } from '../lib/session';
 import type { RootStackParamList } from '../navigation/types';
 import { BOOK_STATUSES, type Book, type BookStatus } from '../types/book';
 
@@ -26,6 +27,8 @@ export default function BookListScreen() {
   const [books, setBooks] = useState<Book[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [session, setSessionState] = useState<Session | null>(null);
+  const [signingOut, setSigningOut] = useState(false);
 
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -54,9 +57,28 @@ export default function BookListScreen() {
       if (requestIdRef.current !== requestId) return;
       setError(e instanceof Error ? e.message : 'Something went wrong.');
     } finally {
-      if (requestIdRef.current === requestId) setLoading(false);
+      // Re-read after the request: a 401 response clears the stored session,
+      // and this keeps the signed-in header in sync with it.
+      const stored = await getSession();
+      if (requestIdRef.current === requestId) {
+        setSessionState(stored);
+        setLoading(false);
+      }
     }
   }, [debouncedSearch, statusFilter]);
+
+  const handleSignOut = useCallback(async () => {
+    setSigningOut(true);
+    try {
+      await logout();
+    } catch {
+      // Best-effort revocation; the local session is cleared regardless.
+    }
+    await clearSession();
+    setSessionState(null);
+    setSigningOut(false);
+    load();
+  }, [load]);
 
   // Runs on focus and whenever the query params change while focused, so the
   // list refreshes after returning from create/edit/delete.
@@ -73,6 +95,29 @@ export default function BookListScreen() {
 
   return (
     <View style={styles.container}>
+      <View style={styles.authRow}>
+        {session !== null ? (
+          <>
+            <Text style={styles.authText} numberOfLines={1}>
+              {session.user.email ?? 'Signed in'}
+            </Text>
+            <Button
+              title={signingOut ? 'Signing out…' : 'Sign out'}
+              onPress={handleSignOut}
+              disabled={signingOut}
+            />
+          </>
+        ) : (
+          <>
+            <Text style={styles.authText}>Anonymous shared list</Text>
+            <Button
+              title="Sign in"
+              onPress={() => navigation.navigate('Login')}
+            />
+          </>
+        )}
+      </View>
+
       <View style={styles.addButton}>
         <Button
           title="Add book"
@@ -156,6 +201,14 @@ export default function BookListScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 12 },
+  authRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 8,
+  },
+  authText: { flexShrink: 1 },
   addButton: { marginBottom: 8 },
   searchInput: {
     borderWidth: 1,

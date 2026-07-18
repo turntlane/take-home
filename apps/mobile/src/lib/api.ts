@@ -5,6 +5,7 @@ import type {
   UpdateBookInput,
 } from '../types/book';
 import { getApiBaseUrl } from './config';
+import { clearSession, getSession, type Session } from './session';
 
 const REQUEST_TIMEOUT_MS = 10_000;
 
@@ -41,8 +42,10 @@ function parseErrorMessages(body: unknown, status: number): string[] {
 
 async function request<T>(
   path: string,
-  init?: { method?: string; body?: unknown },
+  init?: { method?: string; body?: unknown; attachSession?: boolean },
 ): Promise<T> {
+  const session = init?.attachSession === false ? null : await getSession();
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
@@ -54,6 +57,9 @@ async function request<T>(
         Accept: 'application/json',
         ...(init?.body !== undefined
           ? { 'Content-Type': 'application/json' }
+          : {}),
+        ...(session !== null
+          ? { Authorization: `Bearer ${session.accessToken}` }
           : {}),
       },
       body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
@@ -70,6 +76,11 @@ async function request<T>(
   }
 
   if (!response.ok) {
+    // An expired/revoked stored token means we are signed out; no silent
+    // refresh by design. The next request proceeds against the anonymous pool.
+    if (response.status === 401 && session !== null) {
+      await clearSession();
+    }
     let body: unknown;
     try {
       body = await response.json();
@@ -123,4 +134,24 @@ export function deleteBook(id: string): Promise<void> {
   return request<void>(`/books/${encodeURIComponent(id)}`, {
     method: 'DELETE',
   });
+}
+
+export function register(email: string, password: string): Promise<Session> {
+  return request<Session>('/auth/register', {
+    method: 'POST',
+    body: { email, password },
+    attachSession: false,
+  });
+}
+
+export function login(email: string, password: string): Promise<Session> {
+  return request<Session>('/auth/login', {
+    method: 'POST',
+    body: { email, password },
+    attachSession: false,
+  });
+}
+
+export function logout(): Promise<void> {
+  return request<void>('/auth/logout', { method: 'POST' });
 }

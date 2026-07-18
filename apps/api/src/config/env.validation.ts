@@ -1,11 +1,21 @@
 import { plainToInstance } from 'class-transformer';
-import { IsNotEmpty, IsString, IsUrl, validateSync } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsString,
+  IsUrl,
+  Matches,
+  validateSync,
+} from 'class-validator';
 
 class EnvironmentVariables {
   @IsUrl(
-    { protocols: ['https'], require_protocol: true, require_tld: false },
-    { message: 'SUPABASE_URL must be a valid https:// URL' },
+    { protocols: ['https', 'http'], require_protocol: true, require_tld: false },
+    { message: 'SUPABASE_URL must be a valid URL' },
   )
+  @Matches(/^https:|^http:\/\/(localhost|127\.0\.0\.1)([:/]|$)/, {
+    message:
+      'SUPABASE_URL must use https:// (http:// is allowed only for localhost)',
+  })
   SUPABASE_URL!: string;
 
   @IsString({ message: 'SUPABASE_SERVICE_ROLE_KEY must be set' })

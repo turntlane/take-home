@@ -5,6 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { AuthUser } from '../auth/auth.guard';
 import { SupabaseService } from '../supabase/supabase.service';
 import { Book, BookRow, mapBookRow } from './book.types';
 import { CreateBookDto } from './dto/create-book.dto';
@@ -22,8 +23,11 @@ export class BooksService {
 
   constructor(private readonly supabase: SupabaseService) {}
 
-  async list(query: ListBooksQueryDto): Promise<Book[]> {
+  async list(user: AuthUser | null, query: ListBooksQueryDto): Promise<Book[]> {
     let builder = this.supabase.getClient().from('books').select('*');
+    builder = user
+      ? builder.eq('user_id', user.id)
+      : builder.is('user_id', null);
 
     if (query.search) {
       builder = builder.ilike('title', `%${escapeLikePattern(query.search)}%`);
@@ -44,13 +48,17 @@ export class BooksService {
     return (data as BookRow[]).map(mapBookRow);
   }
 
-  async getById(id: string): Promise<Book> {
-    const { data, error } = await this.supabase
+  async getById(user: AuthUser | null, id: string): Promise<Book> {
+    let builder = this.supabase
       .getClient()
       .from('books')
       .select('*')
-      .eq('id', id)
-      .maybeSingle();
+      .eq('id', id);
+    builder = user
+      ? builder.eq('user_id', user.id)
+      : builder.is('user_id', null);
+
+    const { data, error } = await builder.maybeSingle();
 
     if (error) {
       this.logger.error(`Failed to fetch book: ${error.message}`);
@@ -63,11 +71,11 @@ export class BooksService {
     return mapBookRow(data as BookRow);
   }
 
-  async create(dto: CreateBookDto): Promise<Book> {
+  async create(user: AuthUser | null, dto: CreateBookDto): Promise<Book> {
     const { data, error } = await this.supabase
       .getClient()
       .from('books')
-      .insert(toRowPatch(dto))
+      .insert({ ...toRowPatch(dto), user_id: user?.id ?? null })
       .select('*')
       .single();
 
@@ -79,7 +87,11 @@ export class BooksService {
     return mapBookRow(data as BookRow);
   }
 
-  async update(id: string, dto: UpdateBookDto): Promise<Book> {
+  async update(
+    user: AuthUser | null,
+    id: string,
+    dto: UpdateBookDto,
+  ): Promise<Book> {
     const patch = toRowPatch(dto);
     if (Object.keys(patch).length === 0) {
       throw new BadRequestException(
@@ -87,13 +99,16 @@ export class BooksService {
       );
     }
 
-    const { data, error } = await this.supabase
+    let builder = this.supabase
       .getClient()
       .from('books')
       .update(patch)
-      .eq('id', id)
-      .select('*')
-      .maybeSingle();
+      .eq('id', id);
+    builder = user
+      ? builder.eq('user_id', user.id)
+      : builder.is('user_id', null);
+
+    const { data, error } = await builder.select('*').maybeSingle();
 
     if (error) {
       this.logger.error(`Failed to update book: ${error.message}`);
@@ -106,13 +121,17 @@ export class BooksService {
     return mapBookRow(data as BookRow);
   }
 
-  async remove(id: string): Promise<void> {
-    const { data, error } = await this.supabase
+  async remove(user: AuthUser | null, id: string): Promise<void> {
+    let builder = this.supabase
       .getClient()
       .from('books')
       .delete()
-      .eq('id', id)
-      .select('id');
+      .eq('id', id);
+    builder = user
+      ? builder.eq('user_id', user.id)
+      : builder.is('user_id', null);
+
+    const { data, error } = await builder.select('id');
 
     if (error) {
       this.logger.error(`Failed to delete book: ${error.message}`);

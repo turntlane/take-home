@@ -10,7 +10,9 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
+import { AuthUser, CurrentUser, OptionalAuthGuard } from '../auth/auth.guard';
 import { Book } from './book.types';
 import { BooksService } from './books.service';
 import { CreateBookDto } from './dto/create-book.dto';
@@ -18,35 +20,49 @@ import { ListBooksQueryDto } from './dto/list-books-query.dto';
 import { UpdateBookDto } from './dto/update-book.dto';
 
 @Controller('books')
+@UseGuards(OptionalAuthGuard)
 export class BooksController {
   constructor(private readonly booksService: BooksService) {}
 
   @Get()
-  list(@Query() query: ListBooksQueryDto): Promise<Book[]> {
-    return this.booksService.list(query);
+  list(
+    @CurrentUser() user: AuthUser | null,
+    @Query() query: ListBooksQueryDto,
+  ): Promise<Book[]> {
+    return this.booksService.list(user, query);
   }
 
   @Get(':id')
-  getById(@Param('id', ParseUUIDPipe) id: string): Promise<Book> {
-    return this.booksService.getById(id);
+  getById(
+    @CurrentUser() user: AuthUser | null,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<Book> {
+    return this.booksService.getById(user, id);
   }
 
   @Post()
-  create(@Body() dto: CreateBookDto): Promise<Book> {
-    return this.booksService.create(dto);
+  create(
+    @CurrentUser() user: AuthUser | null,
+    @Body() dto: CreateBookDto,
+  ): Promise<Book> {
+    return this.booksService.create(user, dto);
   }
 
   @Patch(':id')
   update(
+    @CurrentUser() user: AuthUser | null,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateBookDto,
   ): Promise<Book> {
-    return this.booksService.update(id, dto);
+    return this.booksService.update(user, id, dto);
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
-    return this.booksService.remove(id);
+  remove(
+    @CurrentUser() user: AuthUser | null,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<void> {
+    return this.booksService.remove(user, id);
   }
 }

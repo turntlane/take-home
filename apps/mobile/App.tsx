@@ -6,6 +6,8 @@ import BookDetailScreen from './src/screens/BookDetailScreen';
 import BookListScreen from './src/screens/BookListScreen';
 import CreateBookScreen from './src/screens/CreateBookScreen';
 import EditBookScreen from './src/screens/EditBookScreen';
+import LoginScreen from './src/screens/LoginScreen';
+import RegisterScreen from './src/screens/RegisterScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -32,6 +34,16 @@ export default function App() {
           name="EditBook"
           component={EditBookScreen}
           options={{ title: 'Edit book' }}
+        />
+        <Stack.Screen
+          name="Login"
+          component={LoginScreen}
+          options={{ title: 'Sign in' }}
+        />
+        <Stack.Screen
+          name="Register"
+          component={RegisterScreen}
+          options={{ title: 'Register' }}
         />
       </Stack.Navigator>
       <StatusBar style="auto" />

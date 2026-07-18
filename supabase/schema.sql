@@ -7,7 +7,7 @@ drop table if exists books;
 
 create table books (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users (id) on delete cascade,
+  user_id uuid references auth.users (id) on delete cascade,
   title text not null,
   author text,
   status text not null default 'to_read',

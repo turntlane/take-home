@@ -18,6 +18,7 @@ import type { RootStackParamList } from '../navigation/types';
 import { BOOK_STATUSES, type Book, type BookStatus } from '../types/book';
 
 const SEARCH_DEBOUNCE_MS = 300;
+const PAGE_SIZE = 20;
 
 export default function BookListScreen() {
   const navigation =
@@ -25,7 +26,10 @@ export default function BookListScreen() {
   // `null` = never loaded successfully; keeps the first-load spinner distinct
   // from background refetches (filter changes, refocus) that keep stale rows.
   const [books, setBooks] = useState<Book[] | null>(null);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [session, setSessionState] = useState<Session | null>(null);
   const [signingOut, setSigningOut] = useState(false);
@@ -48,11 +52,19 @@ export default function BookListScreen() {
   const load = useCallback(async () => {
     const requestId = ++requestIdRef.current;
     setLoading(true);
+    setLoadingMore(false);
+    setLoadMoreError(false);
     setError(null);
     try {
-      const result = await listBooks(debouncedSearch || undefined, statusFilter);
+      const page = await listBooks({
+        search: debouncedSearch || undefined,
+        status: statusFilter,
+        limit: PAGE_SIZE,
+        offset: 0,
+      });
       if (requestIdRef.current !== requestId) return;
-      setBooks(result);
+      setBooks(page.items);
+      setTotal(page.total);
     } catch (e) {
       if (requestIdRef.current !== requestId) return;
       setError(e instanceof Error ? e.message : 'Something went wrong.');
@@ -66,6 +78,38 @@ export default function BookListScreen() {
       }
     }
   }, [debouncedSearch, statusFilter]);
+
+  const loadMore = useCallback(async () => {
+    if (books === null || loading || loadingMore) return;
+    if (books.length >= total) return;
+    const requestId = ++requestIdRef.current;
+    setLoadingMore(true);
+    setLoadMoreError(false);
+    try {
+      const page = await listBooks({
+        search: debouncedSearch || undefined,
+        status: statusFilter,
+        limit: PAGE_SIZE,
+        offset: books.length,
+      });
+      if (requestIdRef.current !== requestId) return;
+      // Rows inserted since the first page shift offsets; drop ids we already
+      // show rather than rendering duplicates.
+      setBooks((current) => {
+        const shown = new Set((current ?? []).map((b) => b.id));
+        return [
+          ...(current ?? []),
+          ...page.items.filter((b) => !shown.has(b.id)),
+        ];
+      });
+      setTotal(page.total);
+    } catch {
+      if (requestIdRef.current !== requestId) return;
+      setLoadMoreError(true);
+    } finally {
+      if (requestIdRef.current === requestId) setLoadingMore(false);
+    }
+  }, [books, total, loading, loadingMore, debouncedSearch, statusFilter]);
 
   const handleSignOut = useCallback(async () => {
     setSigningOut(true);
@@ -169,6 +213,20 @@ export default function BookListScreen() {
           keyExtractor={(book) => book.id}
           refreshing={loading}
           onRefresh={load}
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={
+            loadingMore ? (
+              <View style={styles.footer}>
+                <ActivityIndicator />
+              </View>
+            ) : loadMoreError ? (
+              <View style={styles.footer}>
+                <Text style={styles.errorText}>Couldn't load more books.</Text>
+                <Button title="Try again" onPress={loadMore} />
+              </View>
+            ) : null
+          }
           ListEmptyComponent={
             <View style={styles.center}>
               <Text>
@@ -228,6 +286,7 @@ const styles = StyleSheet.create({
   filterSelected: { backgroundColor: '#333', borderColor: '#333' },
   filterSelectedText: { color: '#fff' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8, padding: 24 },
+  footer: { alignItems: 'center', gap: 8, paddingVertical: 16 },
   errorText: { textAlign: 'center' },
   row: {
     paddingVertical: 10,

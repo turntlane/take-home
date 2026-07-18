@@ -1,5 +1,6 @@
 import type {
   Book,
+  BookListPage,
   BookStatus,
   CreateBookInput,
   UpdateBookInput,
@@ -104,15 +105,21 @@ async function request<T>(
   }
 }
 
-export function listBooks(
-  search?: string,
-  status?: BookStatus,
-): Promise<Book[]> {
-  const params = new URLSearchParams();
-  if (search) params.set('search', search);
-  if (status) params.set('status', status);
-  const query = params.toString();
-  return request<Book[]>(`/books${query ? `?${query}` : ''}`);
+export interface ListBooksParams {
+  search?: string;
+  status?: BookStatus;
+  limit?: number;
+  offset?: number;
+}
+
+export function listBooks(params: ListBooksParams = {}): Promise<BookListPage> {
+  const query = new URLSearchParams();
+  if (params.search) query.set('search', params.search);
+  if (params.status) query.set('status', params.status);
+  if (params.limit !== undefined) query.set('limit', String(params.limit));
+  if (params.offset !== undefined) query.set('offset', String(params.offset));
+  const qs = query.toString();
+  return request<BookListPage>(`/books${qs ? `?${qs}` : ''}`);
 }
 
 export function getBook(id: string): Promise<Book> {

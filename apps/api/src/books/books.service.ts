@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { AuthUser } from '../auth/auth.guard';
 import { SupabaseService } from '../supabase/supabase.service';
-import { Book, BookRow, mapBookRow } from './book.types';
+import { Book, BookListPage, BookRow, mapBookRow } from './book.types';
 import { CreateBookDto } from './dto/create-book.dto';
 import { ListBooksQueryDto } from './dto/list-books-query.dto';
 import { UpdateBookDto } from './dto/update-book.dto';
@@ -17,16 +17,76 @@ function escapeLikePattern(value: string): string {
   return value.replace(/[\\%_]/g, (char) => `\\${char}`);
 }
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 @Injectable()
 export class BooksService {
   private readonly logger = new Logger(BooksService.name);
 
   constructor(private readonly supabase: SupabaseService) {}
 
-  async list(user: AuthUser | null, query: ListBooksQueryDto): Promise<Book[]> {
-    let builder = this.supabase.getClient().from('books').select('*');
+  // Signed-in callers see the shared anonymous pool plus their own books.
+  // The UUID check guards the `.or()` filter string: nothing may be embedded
+  // in a PostgREST filter expression without a validated shape.
+  private callerScopeFilter(user: AuthUser): string {
+    if (!UUID_PATTERN.test(user.id)) {
+      this.logger.error(`Rejected non-UUID user id from auth: ${user.id}`);
+      throw new InternalServerErrorException('Failed to resolve caller');
+    }
+    return `user_id.eq.${user.id},user_id.is.null`;
+  }
+
+  async list(
+    user: AuthUser | null,
+    query: ListBooksQueryDto,
+  ): Promise<BookListPage> {
+    // Secondary sort on id keeps page boundaries stable when created_at ties.
+    const { data, error, count } = await this.listQuery(user, query)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(query.offset, query.offset + query.limit - 1);
+
+    // PostgREST rejects a range starting past the last row; a valid offset
+    // beyond the data is an empty page, not an error.
+    if (error?.code === 'PGRST103') {
+      const { count: total, error: countError } = await this.listQuery(
+        user,
+        query,
+        { head: true },
+      );
+      if (countError) {
+        this.logger.error(`Failed to count books: ${countError.message}`);
+        throw new InternalServerErrorException('Failed to fetch books');
+      }
+      return { items: [], total: total ?? 0 };
+    }
+
+    if (error) {
+      this.logger.error(`Failed to list books: ${error.message}`);
+      throw new InternalServerErrorException('Failed to fetch books');
+    }
+
+    return {
+      items: (data as BookRow[]).map(mapBookRow),
+      total: count ?? 0,
+    };
+  }
+
+  private listQuery(
+    user: AuthUser | null,
+    query: ListBooksQueryDto,
+    options: { head?: boolean } = {},
+  ) {
+    let builder = this.supabase
+      .getClient()
+      .from('books')
+      .select(options.head ? 'id' : '*', {
+        count: 'exact',
+        head: options.head ?? false,
+      });
     builder = user
-      ? builder.eq('user_id', user.id)
+      ? builder.or(this.callerScopeFilter(user))
       : builder.is('user_id', null);
 
     if (query.search) {
@@ -35,17 +95,7 @@ export class BooksService {
     if (query.status) {
       builder = builder.eq('status', query.status);
     }
-
-    const { data, error } = await builder.order('created_at', {
-      ascending: false,
-    });
-
-    if (error) {
-      this.logger.error(`Failed to list books: ${error.message}`);
-      throw new InternalServerErrorException('Failed to fetch books');
-    }
-
-    return (data as BookRow[]).map(mapBookRow);
+    return builder;
   }
 
   async getById(user: AuthUser | null, id: string): Promise<Book> {
@@ -55,7 +105,7 @@ export class BooksService {
       .select('*')
       .eq('id', id);
     builder = user
-      ? builder.eq('user_id', user.id)
+      ? builder.or(this.callerScopeFilter(user))
       : builder.is('user_id', null);
 
     const { data, error } = await builder.maybeSingle();
@@ -105,7 +155,7 @@ export class BooksService {
       .update(patch)
       .eq('id', id);
     builder = user
-      ? builder.eq('user_id', user.id)
+      ? builder.or(this.callerScopeFilter(user))
       : builder.is('user_id', null);
 
     const { data, error } = await builder.select('*').maybeSingle();
@@ -128,7 +178,7 @@ export class BooksService {
       .delete()
       .eq('id', id);
     builder = user
-      ? builder.eq('user_id', user.id)
+      ? builder.or(this.callerScopeFilter(user))
       : builder.is('user_id', null);
 
     const { data, error } = await builder.select('id');

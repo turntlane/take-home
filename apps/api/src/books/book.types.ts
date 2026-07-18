@@ -23,6 +23,12 @@ export interface Book {
   updatedAt: string;
 }
 
+/** One page of the book list plus the total row count for the same filters. */
+export interface BookListPage {
+  items: Book[];
+  total: number;
+}
+
 export function mapBookRow(row: BookRow): Book {
   return {
     id: row.id,

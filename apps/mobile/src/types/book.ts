@@ -14,6 +14,11 @@ export interface Book {
   updatedAt: string;
 }
 
+export interface BookListPage {
+  items: Book[];
+  total: number;
+}
+
 export interface CreateBookInput {
   title: string;
   author?: string | null;

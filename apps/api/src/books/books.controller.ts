@@ -13,7 +13,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthUser, CurrentUser, OptionalAuthGuard } from '../auth/auth.guard';
-import { Book } from './book.types';
+import { Book, BookListPage } from './book.types';
 import { BooksService } from './books.service';
 import { CreateBookDto } from './dto/create-book.dto';
 import { ListBooksQueryDto } from './dto/list-books-query.dto';
@@ -28,7 +28,7 @@ export class BooksController {
   list(
     @CurrentUser() user: AuthUser | null,
     @Query() query: ListBooksQueryDto,
-  ): Promise<Book[]> {
+  ): Promise<BookListPage> {
     return this.booksService.list(user, query);
   }
 
